@@ -29,6 +29,10 @@ label.tog{display:flex;gap:6px;align-items:center;margin-left:auto}
 .genes{font-size:.8rem;color:#4b6a5a;margin-top:4px}
 details{margin-top:28px}
 textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--line);border-radius:10px;padding:8px}
+.hidden{display:none}
+.pers{font-size:.85rem;font-weight:600;color:var(--accent)}
+#start h2{margin:0 0 6px}
+#start button{margin-top:8px}
 @media (prefers-reduced-motion:no-preference){.card{transition:transform .12s}.card:hover{transform:translateY(-3px)}}
 </style>
 </head>
@@ -36,6 +40,12 @@ textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--lin
 <main>
 <h1>Fox Den</h1>
 <p class="sub">Pick one male and one female, then breed them. Every pup gets one gene copy from each parent. Dominant genes hide recessive ones, so surprises can pop up in later litters.</p>
+<section id="start" class="hidden">
+  <h2>Choose your first fox</h2>
+  <p class="sub">Every new player sees these same three. You’ll also get a wandering mate of the opposite sex, so you can start breeding right away.</p>
+  <div class="grid" id="picks"></div>
+</section>
+<div id="game">
 <div class="bar">
   <button id="breed" disabled>Breed selected pair</button>
   <button id="release" class="alt" disabled>Release selected</button>
@@ -59,20 +69,23 @@ textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--lin
     <button class="alt" id="reset">Start over</button>
   </div>
 </details>
+</div>
 </main>
 
 <script>
 const KEY='foxden-save-v1';
 const NAMES=['Ember','Ash','Maple','Juniper','Pip','Clover','Rusty','Willow','Sage','Biscuit','Nova','Fern','Poppy','Tansy','Flint','Moss','Basil','Cinder','Wren','Hazel'];
 const ORDER={coat:['R','r'],tip:['W','w'],eyes:['E','e'],mark:['S','s']};
+const PERS=['Bold','Gentle','Playful','Clever','Shy','Curious','Loyal','Mischievous'];
+const STARTERS=[
+ {id:'st-maple',name:'Maple',sex:'F',pers:'Bold',g:{coat:['R','R'],tip:['W','W'],eyes:['E','E'],mark:['S','S']},blurb:'A classic red fox with a white tail tip. Dependable, and the easiest to read.'},
+ {id:'st-slate',name:'Slate',sex:'M',pers:'Gentle',g:{coat:['r','r'],tip:['W','w'],eyes:['E','E'],mark:['S','S']},blurb:'A calm silver fox. Silver is recessive, so every pup will carry it.'},
+ {id:'st-dusk',name:'Dusk',sex:'F',pers:'Playful',g:{coat:['R','r'],tip:['w','w'],eyes:['E','E'],mark:['s','s']},blurb:'Red with a dark tail tip and a spotted back. It hides a silver gene, so watch the pups.'}
+];
 let foxes=[],selected=[],fresh=[];
 
 const pick=a=>a[Math.floor(Math.random()*a.length)];
-function mk(sex,g,name){return{id:Math.random().toString(36).slice(2,9),name:name||pick(NAMES),sex,g}}
-function starter(){return[
-  mk('F',{coat:['R','r'],tip:['W','w'],eyes:['E','e'],mark:['S','s']},'Ember'),
-  mk('M',{coat:['R','r'],tip:['w','w'],eyes:['E','e'],mark:['s','s']},'Ash')
-]}
+function mk(sex,g,name,pers){return{id:Math.random().toString(36).slice(2,9),name:name||pick(NAMES),sex,g,pers:pers||pick(PERS)}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(foxes))}catch(e){}}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(d)&&d.length)return d}catch(e){}return null}
 function look(g){
@@ -108,6 +121,7 @@ function render(){
   const show=document.getElementById('showGenes').checked;
   den.innerHTML=foxes.map(f=>`<div class="card${selected.includes(f.id)?' sel':''}${fresh.includes(f.id)?' new':''}" tabindex="0" role="button" aria-pressed="${selected.includes(f.id)}" data-id="${f.id}">
     ${svg(f)}<div class="name">${f.name} ${f.sex==='F'?'♀':'♂'}</div>
+    <div class="pers">${f.pers||''}</div>
     <div class="small">${look(f.g).text}</div>
     ${show?`<div class="genes">${genesText(f.g)}</div>`:''}</div>`).join('');
   const two=selected.length===2;
@@ -133,7 +147,7 @@ function breed(){
       al.sort((x,y)=>ORDER[k].indexOf(x)-ORDER[k].indexOf(y));
       g[k]=al
     }
-    const pup=mk(Math.random()<.5?'F':'M',g);
+    const pup=mk(Math.random()<.5?'F':'M',g,null,Math.random()<.8?pick([a.pers,b.pers].filter(Boolean)):null);
     foxes.push(pup);fresh.push(pup.id)
   }
   selected=[];save();render();
@@ -156,9 +170,22 @@ document.getElementById('imp').onclick=()=>{
     foxes=d;selected=[];fresh=[];save();render();say('Save loaded.')}
   catch(e){say('That save didn’t look right. Copy the whole text and try again.')}
 };
-document.getElementById('reset').onclick=()=>{if(confirm('Delete your den and start over?')){foxes=starter();selected=[];fresh=[];save();render();say('Fresh start!')}};
+document.getElementById('reset').onclick=()=>{if(confirm('Delete your den and start over?')){foxes=[];selected=[];fresh=[];try{localStorage.removeItem(KEY)}catch(e){}showStart()}};
 
-foxes=load()||starter();save();render();
+function show(w){document.getElementById('game').classList.toggle('hidden',w!=='game');document.getElementById('start').classList.toggle('hidden',w!=='start');if(w==='game')render()}
+function showStart(){
+  document.getElementById('picks').innerHTML=STARTERS.map(f=>`<div class="card">${svg(f)}<div class="name">${f.name} ${f.sex==='F'?'♀':'♂'}</div><div class="pers">${f.pers}</div><div class="small">${look(f.g).text}</div><p class="small">${f.blurb}</p><button data-pick="${f.id}">Choose ${f.name}</button></div>`).join('');
+  show('start')
+}
+document.getElementById('picks').addEventListener('click',e=>{
+  const b=e.target.closest('[data-pick]');if(!b)return;
+  const f=STARTERS.find(x=>x.id===b.dataset.pick);
+  const mate=mk(f.sex==='F'?'M':'F',{coat:['R','r'],tip:['W','w'],eyes:['E','e'],mark:['S','s']},pick(NAMES.filter(n=>n!==f.name)));
+  foxes=[{id:f.id,name:f.name,sex:f.sex,g:f.g,pers:f.pers},mate];selected=[];fresh=[];save();show('game');
+  say('Meet '+f.name+' and '+mate.name+'. Select both, then breed them!')
+});
+foxes=load();
+if(foxes){show('game')}else{foxes=[];showStart()}
 </script>
 </body>
 </html>
