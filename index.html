@@ -1,1 +1,164 @@
-Hello, this is my website!
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fox Den</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap">
+<style>
+:root{--bg:#dde8d6;--ink:#1f3a2e;--card:#f4f8ef;--line:#a9c1a0;--accent:#2f6f8f;--sel:#e08a2e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Fredoka',system-ui,sans-serif;line-height:1.45}
+main{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:2.2rem;margin:0 0 4px}
+p.sub{margin:0 0 18px;max-width:60ch}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:9px 16px;background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:var(--card);color:var(--ink);border:2px solid var(--line)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,.card:focus-visible{outline:3px solid var(--sel);outline-offset:2px}
+label.tog{display:flex;gap:6px;align-items:center;margin-left:auto}
+#msg{min-height:1.5em;margin:0 0 14px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+.card{background:var(--card);border:3px solid var(--line);border-radius:16px;padding:10px;cursor:pointer;text-align:center}
+.card.sel{border-color:var(--sel)}
+.card.new{background:#fff8e0}
+.card svg{width:100%;height:auto}
+.name{font-weight:600;font-size:1.1rem}
+.small{font-size:.85rem}
+.genes{font-size:.8rem;color:#4b6a5a;margin-top:4px}
+details{margin-top:28px}
+textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--line);border-radius:10px;padding:8px}
+@media (prefers-reduced-motion:no-preference){.card{transition:transform .12s}.card:hover{transform:translateY(-3px)}}
+</style>
+</head>
+<body>
+<main>
+<h1>Fox Den</h1>
+<p class="sub">Pick one male and one female, then breed them. Every pup gets one gene copy from each parent. Dominant genes hide recessive ones, so surprises can pop up in later litters.</p>
+<div class="bar">
+  <button id="breed" disabled>Breed selected pair</button>
+  <button id="release" class="alt" disabled>Release selected</button>
+  <label class="tog"><input type="checkbox" id="showGenes"> Show genes</label>
+</div>
+<p id="msg" role="status">Choose two foxes to begin.</p>
+<div class="grid" id="den"></div>
+
+<details>
+  <summary>Genetics guide</summary>
+  <p class="small">Coat: R = red (dominant), r = silver. Tail tip: W = white tip (dominant), w = dark tip. Eyes: E = amber (dominant), e = blue. Back pattern: S = plain (dominant), s = spotted. A fox needs two lowercase copies (like rr) to show the recessive look.</p>
+</details>
+
+<details>
+  <summary>Save backup</summary>
+  <p class="small">Your den saves in this browser automatically. To move it to another device, copy the text below, or paste a saved backup here and press Load.</p>
+  <textarea id="box" aria-label="Save data"></textarea>
+  <div class="bar" style="margin-top:8px">
+    <button class="alt" id="exp">Show my save</button>
+    <button class="alt" id="imp">Load pasted save</button>
+    <button class="alt" id="reset">Start over</button>
+  </div>
+</details>
+</main>
+
+<script>
+const KEY='foxden-save-v1';
+const NAMES=['Ember','Ash','Maple','Juniper','Pip','Clover','Rusty','Willow','Sage','Biscuit','Nova','Fern','Poppy','Tansy','Flint','Moss','Basil','Cinder','Wren','Hazel'];
+const ORDER={coat:['R','r'],tip:['W','w'],eyes:['E','e'],mark:['S','s']};
+let foxes=[],selected=[],fresh=[];
+
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+function mk(sex,g,name){return{id:Math.random().toString(36).slice(2,9),name:name||pick(NAMES),sex,g}}
+function starter(){return[
+  mk('F',{coat:['R','r'],tip:['W','w'],eyes:['E','e'],mark:['S','s']},'Ember'),
+  mk('M',{coat:['R','r'],tip:['w','w'],eyes:['E','e'],mark:['s','s']},'Ash')
+]}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(foxes))}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(d)&&d.length)return d}catch(e){}return null}
+function look(g){
+  const red=g.coat.includes('R'),tip=g.tip.includes('W'),amber=g.eyes.includes('E'),plain=g.mark.includes('S');
+  return{coat:red?'#d9672b':'#aab4bb',tip:tip?'#fbf6ee':'#3b2b25',eye:amber?'#e3a21a':'#3f9bd8',spots:!plain,
+    text:(red?'Red':'Silver')+', '+(amber?'amber':'blue')+' eyes, '+(tip?'white':'dark')+' tail tip'+(plain?'':', spotted')}
+}
+function svg(f){
+  const p=look(f.g),id='t'+f.id;
+  return `<svg viewBox="0 0 200 160" role="img" aria-label="${f.name}, ${p.text}">
+  <defs><clipPath id="${id}"><path d="M140 108 Q196 104 186 48 Q150 58 134 92Z"/></clipPath></defs>
+  <path d="M140 108 Q196 104 186 48 Q150 58 134 92Z" fill="${p.coat}"/>
+  <circle cx="182" cy="56" r="24" fill="${p.tip}" clip-path="url(#${id})"/>
+  <ellipse cx="100" cy="104" rx="48" ry="28" fill="${p.coat}"/>
+  <ellipse cx="92" cy="122" rx="30" ry="8" fill="#f6efe6"/>
+  ${p.spots?'<circle cx="92" cy="86" r="4.5" fill="#000" opacity=".2"/><circle cx="108" cy="90" r="5" fill="#000" opacity=".2"/><circle cx="124" cy="95" r="4" fill="#000" opacity=".2"/><circle cx="100" cy="98" r="3.5" fill="#000" opacity=".2"/>':''}
+  <rect x="66" y="122" width="11" height="26" rx="5" fill="${p.coat}"/><rect x="66" y="136" width="11" height="12" rx="5" fill="#3b2b25"/>
+  <rect x="82" y="122" width="11" height="26" rx="5" fill="${p.coat}"/><rect x="82" y="136" width="11" height="12" rx="5" fill="#3b2b25"/>
+  <rect x="116" y="122" width="11" height="26" rx="5" fill="${p.coat}"/><rect x="116" y="136" width="11" height="12" rx="5" fill="#3b2b25"/>
+  <rect x="131" y="120" width="11" height="28" rx="5" fill="${p.coat}"/><rect x="131" y="136" width="11" height="12" rx="5" fill="#3b2b25"/>
+  <polygon points="30,62 32,32 50,54" fill="${p.coat}"/><polygon points="52,54 68,30 74,60" fill="${p.coat}"/>
+  <polygon points="34,56 35,41 44,53" fill="#3b2b25"/><polygon points="58,53 66,40 69,56" fill="#3b2b25"/>
+  <ellipse cx="48" cy="80" rx="28" ry="24" fill="${p.coat}"/>
+  <ellipse cx="34" cy="92" rx="18" ry="11" fill="#f6efe6"/>
+  <circle cx="14" cy="88" r="4" fill="#2a1d18"/>
+  <circle cx="40" cy="74" r="5.5" fill="${p.eye}"/><circle cx="40" cy="74" r="2.3" fill="#1a1210"/>
+  </svg>`
+}
+function genesText(g){return Object.keys(ORDER).map(k=>g[k].join('')).join(' ')}
+
+function render(){
+  const den=document.getElementById('den');
+  const show=document.getElementById('showGenes').checked;
+  den.innerHTML=foxes.map(f=>`<div class="card${selected.includes(f.id)?' sel':''}${fresh.includes(f.id)?' new':''}" tabindex="0" role="button" aria-pressed="${selected.includes(f.id)}" data-id="${f.id}">
+    ${svg(f)}<div class="name">${f.name} ${f.sex==='F'?'♀':'♂'}</div>
+    <div class="small">${look(f.g).text}</div>
+    ${show?`<div class="genes">${genesText(f.g)}</div>`:''}</div>`).join('');
+  const two=selected.length===2;
+  document.getElementById('breed').disabled=!two;
+  document.getElementById('release').disabled=selected.length===0;
+}
+function toggle(id){
+  const i=selected.indexOf(id);
+  if(i>=0)selected.splice(i,1);else{if(selected.length===2)selected.shift();selected.push(id)}
+  render()
+}
+function say(t){document.getElementById('msg').textContent=t}
+
+function breed(){
+  const [a,b]=selected.map(id=>foxes.find(f=>f.id===id));
+  if(!a||!b)return;
+  if(a.sex===b.sex){say('You need one male and one female to breed.');return}
+  const n=1+Math.floor(Math.random()*3);fresh=[];
+  for(let i=0;i<n;i++){
+    const g={};
+    for(const k in ORDER){
+      const al=[pick(a.g[k]),pick(b.g[k])];
+      al.sort((x,y)=>ORDER[k].indexOf(x)-ORDER[k].indexOf(y));
+      g[k]=al
+    }
+    const pup=mk(Math.random()<.5?'F':'M',g);
+    foxes.push(pup);fresh.push(pup.id)
+  }
+  selected=[];save();render();
+  say(a.name+' and '+b.name+' had '+n+(n===1?' pup!':' pups!')+' New pups are highlighted.')
+}
+function release(){
+  if(foxes.length-selected.length<2){say('Keep at least two foxes so you can still breed.');return}
+  foxes=foxes.filter(f=>!selected.includes(f.id));selected=[];fresh=[];save();render();say('Released.')
+}
+
+document.getElementById('den').addEventListener('click',e=>{const c=e.target.closest('.card');if(c)toggle(c.dataset.id)});
+document.getElementById('den').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const c=e.target.closest('.card');if(c){e.preventDefault();toggle(c.dataset.id)}}});
+document.getElementById('breed').onclick=breed;
+document.getElementById('release').onclick=release;
+document.getElementById('showGenes').onchange=render;
+document.getElementById('exp').onclick=()=>{document.getElementById('box').value=JSON.stringify(foxes)};
+document.getElementById('imp').onclick=()=>{
+  try{const d=JSON.parse(document.getElementById('box').value);
+    if(!Array.isArray(d)||!d.every(f=>f&&f.g&&f.g.coat&&f.g.tip&&f.g.eyes&&f.g.mark))throw 0;
+    foxes=d;selected=[];fresh=[];save();render();say('Save loaded.')}
+  catch(e){say('That save didn’t look right. Copy the whole text and try again.')}
+};
+document.getElementById('reset').onclick=()=>{if(confirm('Delete your den and start over?')){foxes=starter();selected=[];fresh=[];save();render();say('Fresh start!')}};
+
+foxes=load()||starter();save();render();
+</script>
+</body>
+</html>
