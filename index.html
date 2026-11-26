@@ -122,7 +122,7 @@ const STARTERS=[
 let foxes=[],selected=[],fresh=[];
 const KEY2='foxden-visit-v1';
 const FIRST_MS=15000;      // first visitor arrives after 15 seconds
-const VISIT_MS=120000;     // later visitors every 2 minutes (change this number to slow it down)
+const VISIT_MS=4*60*60*1000;     // later visitors every 4 hours
 let visit={visitor:null,nextVisit:0},vKey='';
 
 const pick=a=>a[Math.floor(Math.random()*a.length)];
