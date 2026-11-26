@@ -132,7 +132,7 @@ function save(){if(window.cloudSave)cloudSave()}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(d)&&d.length)return d}catch(e){}return null}
 function saveVisit(){if(window.cloudSave)cloudSave()}
 function loadVisit(){try{const d=JSON.parse(localStorage.getItem(KEY2));if(d&&typeof d.nextVisit==='number')return d}catch(e){}return{visitor:null,nextVisit:Date.now()+VISIT_MS}}
-function fmt(ms){const t=Math.max(0,Math.ceil(ms/1000));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')}
+function fmt(ms){const t=Math.max(0,Math.ceil(ms/1000));const h=Math.floor(t/3600),m=Math.floor(t%3600/60);return h+':'+String(m).padStart(2,'0')+':'+String(t%60).padStart(2,'0')}
 function makeVisitor(){
   const hasM=foxes.some(f=>f.sex==='M'),hasF=foxes.some(f=>f.sex==='F');
   const need=!hasM?'M':!hasF?'F':null;
