@@ -36,6 +36,9 @@ textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--lin
 .visitor{display:flex;flex-wrap:wrap;gap:16px;align-items:center;background:var(--card);border:3px dashed var(--line);border-radius:16px;padding:12px;margin-bottom:16px}
 .visitor .card{width:190px;cursor:default}
 .visitor h2{margin:0 0 6px;font-size:1.2rem}
+.authbox{max-width:360px}
+.authbox label{display:block;margin-bottom:10px;font-weight:600}
+.authbox input{width:100%;font:inherit;padding:9px;border:2px solid var(--line);border-radius:10px;background:#fff}
 @media (prefers-reduced-motion:no-preference){.card{transition:transform .12s}.card:hover{transform:translateY(-3px)}}
 </style>
 </head>
@@ -43,12 +46,24 @@ textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--lin
 <main>
 <h1>Fox Den</h1>
 <p class="sub">Pick one male and one female, then breed them. Every pup gets one gene copy from each parent. Dominant genes hide recessive ones, so surprises can pop up in later litters.</p>
+<section id="loading"><p class="sub">Loading… if this doesn’t go away, refresh the page.</p></section>
+<section id="auth" class="hidden">
+  <h2>Log in or create an account</h2>
+  <p class="sub">Your foxes save to your account automatically, so you can play from any device.</p>
+  <div class="authbox">
+    <label>Email<input id="email" type="email" autocomplete="email"></label>
+    <label>Password<input id="pass" type="password" autocomplete="current-password"></label>
+    <div class="bar"><button id="login">Log in</button><button id="signup" class="alt">Create account</button><button id="forgot" class="alt">Forgot password</button></div>
+    <p id="amsg" role="status" class="small"></p>
+  </div>
+</section>
 <section id="start" class="hidden">
   <h2>Choose your first fox</h2>
   <p class="sub">Every new player sees these same three. You’ll start with just this fox. Before long a visitor will wander to your den, and you decide whether they join you.</p>
   <div class="grid" id="picks"></div>
 </section>
-<div id="game">
+<div id="game" class="hidden">
+<div class="bar"><span class="small" id="who"></span><span class="small" id="cloud"></span><button class="alt" id="logout" style="margin-left:auto">Log out</button></div>
 <div class="bar">
   <button id="breed" disabled>Breed selected pair</button>
   <button id="release" class="alt" disabled>Release selected</button>
@@ -95,9 +110,9 @@ let visit={visitor:null,nextVisit:0},vKey='';
 
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 function mk(sex,g,name,pers){return{id:Math.random().toString(36).slice(2,9),name:name||pick(NAMES),sex,g,pers:pers||pick(PERS)}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(foxes))}catch(e){}}
+function save(){if(window.cloudSave)cloudSave()}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(d)&&d.length)return d}catch(e){}return null}
-function saveVisit(){try{localStorage.setItem(KEY2,JSON.stringify(visit))}catch(e){}}
+function saveVisit(){if(window.cloudSave)cloudSave()}
 function loadVisit(){try{const d=JSON.parse(localStorage.getItem(KEY2));if(d&&typeof d.nextVisit==='number')return d}catch(e){}return{visitor:null,nextVisit:Date.now()+VISIT_MS}}
 function fmt(ms){const t=Math.max(0,Math.ceil(ms/1000));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0')}
 function makeVisitor(){
@@ -195,9 +210,12 @@ document.getElementById('imp').onclick=()=>{
     foxes=d;selected=[];fresh=[];save();render();say('Save loaded.')}
   catch(e){say('That save didn’t look right. Copy the whole text and try again.')}
 };
-document.getElementById('reset').onclick=()=>{if(confirm('Delete your den and start over?')){foxes=[];selected=[];fresh=[];try{localStorage.removeItem(KEY);localStorage.removeItem(KEY2)}catch(e){}showStart()}};
+document.getElementById('reset').onclick=()=>{if(confirm('Delete your den and start over?')){foxes=[];selected=[];fresh=[];visit={visitor:null,nextVisit:Date.now()+VISIT_MS};save();showStart()}};
 
-function show(w){document.getElementById('game').classList.toggle('hidden',w!=='game');document.getElementById('start').classList.toggle('hidden',w!=='start');if(w==='game'){render();vKey='';renderVisit()}}
+function show(w){
+  for(const id of ['loading','auth','start','game'])document.getElementById(id).classList.toggle('hidden',id!==w);
+  if(w==='game'){render();vKey='';renderVisit()}
+}
 function showStart(){
   document.getElementById('picks').innerHTML=STARTERS.map(f=>`<div class="card">${svg(f)}<div class="name">${f.name} ${f.sex==='F'?'♀':'♂'}</div><div class="pers">${f.pers}</div><div class="small">${look(f.g).text}</div><p class="small">${f.blurb}</p><button data-pick="${f.id}">Choose ${f.name}</button></div>`).join('');
   show('start')
@@ -231,10 +249,85 @@ document.getElementById('visit').addEventListener('click',e=>{
   visit={visitor:null,nextVisit:Date.now()+VISIT_MS};saveVisit();render();renderVisit()
 });
 document.getElementById('callVisit').onclick=()=>{if(visit.visitor){say('A visitor is already waiting.');return}visit.nextVisit=0;tick()};
-visit=loadVisit();
-foxes=load();
-if(foxes){show('game')}else{foxes=[];showStart()}
+window.getSaveData=()=>JSON.stringify({foxes,visit});
+window.enterAuth=()=>{foxes=[];selected=[];fresh=[];show('auth')};
+window.enterGame=(raw,email)=>{
+  foxes=[];selected=[];fresh=[];visit={visitor:null,nextVisit:Date.now()+VISIT_MS};
+  if(raw){try{const d=JSON.parse(raw);if(Array.isArray(d.foxes))foxes=d.foxes;if(d.visit&&typeof d.visit.nextVisit==='number')visit=d.visit}catch(e){}}
+  document.getElementById('who').textContent='Signed in as '+email;
+  if(foxes.length){show('game');say('Welcome back!')}else showStart()
+};
+show('loading');
 setInterval(tick,1000);
+</script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,sendPasswordResetEmail} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,doc,getDoc,setDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app=initializeApp({
+  apiKey:"AIzaSyD-OwNV83LXXNkg-M08fvJGTFZY5hzyoms",
+  authDomain:"fox-den-4a82c.firebaseapp.com",
+  projectId:"fox-den-4a82c",
+  storageBucket:"fox-den-4a82c.firebasestorage.app",
+  messagingSenderId:"781046718633",
+  appId:"1:781046718633:web:d813b7adda3fe65f0209b8"
+});
+const auth=getAuth(app),db=getFirestore(app);
+const $=id=>document.getElementById(id);
+let user=null,timer=null;
+
+const ERR={
+  'auth/invalid-email':'That email doesn’t look right.',
+  'auth/email-already-in-use':'That email already has an account. Try logging in.',
+  'auth/weak-password':'Choose a password with at least 6 characters.',
+  'auth/invalid-credential':'Wrong email or password.',
+  'auth/wrong-password':'Wrong email or password.',
+  'auth/user-not-found':'Wrong email or password.',
+  'auth/missing-password':'Please enter a password.',
+  'auth/too-many-requests':'Too many tries. Wait a bit and try again.',
+  'auth/network-request-failed':'No connection. Check your internet.'
+};
+const amsg=t=>{$('amsg').textContent=t};
+const fail=e=>amsg(ERR[e.code]||'Something went wrong. Please try again.');
+const creds=()=>[$('email').value.trim(),$('pass').value];
+
+$('login').onclick=async()=>{amsg('');try{await signInWithEmailAndPassword(auth,...creds())}catch(e){fail(e)}};
+$('signup').onclick=async()=>{amsg('');try{await createUserWithEmailAndPassword(auth,...creds())}catch(e){fail(e)}};
+$('forgot').onclick=async()=>{
+  const em=$('email').value.trim();
+  if(!em){amsg('Type your email above first, then press Forgot password.');return}
+  try{await sendPasswordResetEmail(auth,em);amsg('If that email has an account, a reset link is on its way. Check your spam folder too.')}catch(e){fail(e)}
+};
+$('pass').addEventListener('keydown',e=>{if(e.key==='Enter')$('login').click()});
+
+async function flush(){
+  if(!user)return;
+  clearTimeout(timer);
+  try{
+    await setDoc(doc(db,'saves',user.uid),{data:window.getSaveData(),updatedAt:Date.now()});
+    $('cloud').textContent='· Saved'
+  }catch(e){$('cloud').textContent='· Couldn’t save. Check your connection.'}
+}
+window.cloudSave=()=>{if(!user)return;$('cloud').textContent='· Saving…';clearTimeout(timer);timer=setTimeout(flush,800)};
+addEventListener('pagehide',flush);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
+
+$('logout').onclick=async()=>{await flush();user=null;await signOut(auth)};
+
+onAuthStateChanged(auth,async u=>{
+  if(!u){user=null;window.enterAuth();return}
+  try{
+    const snap=await getDoc(doc(db,'saves',u.uid));
+    user=u;
+    $('cloud').textContent='';
+    window.enterGame(snap.exists()?snap.data().data:null,u.email)
+  }catch(e){
+    user=null;window.enterAuth();
+    amsg('Couldn’t load your save, so you’ve been kept out to protect it. Check your connection, then log in again.');
+    signOut(auth)
+  }
+});
 </script>
 </body>
 </html>
