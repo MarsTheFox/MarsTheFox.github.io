@@ -39,6 +39,18 @@ textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--lin
 .authbox{max-width:360px}
 .authbox label{display:block;margin-bottom:10px;font-weight:600}
 .authbox input{width:100%;font:inherit;padding:9px;border:2px solid var(--line);border-radius:10px;background:#fff}
+dialog{border:3px solid var(--line);border-radius:18px;background:var(--card);color:var(--ink);width:min(440px,92vw);padding:16px;font-family:inherit}
+dialog::backdrop{background:rgba(20,40,30,.45)}
+dialog h2{margin:6px 0}
+dialog h3{margin:14px 0 4px;font-size:1rem}
+dialog svg{width:100%;height:auto;background:var(--bg);border-radius:12px}
+dialog input,.litter input{font:inherit;padding:8px;border:2px solid var(--line);border-radius:10px;background:#fff;min-width:0;flex:1}
+dl.tr{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0}
+dl.tr dt{font-weight:600}dl.tr dd{margin:0}
+.litter{background:#fff8e0;border:3px solid var(--line);border-radius:16px;padding:12px;margin-bottom:16px}
+.litter h2{margin:0 0 8px;font-size:1.2rem}
+.lrow{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.lpic{width:110px;flex:none}.lpic svg{width:100%;height:auto}
 @media (prefers-reduced-motion:no-preference){.card{transition:transform .12s}.card:hover{transform:translateY(-3px)}}
 </style>
 </head>
@@ -71,6 +83,7 @@ textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--lin
 </div>
 <p id="msg" role="status">Choose two foxes to begin.</p>
 <div id="visit"></div>
+<div id="litter"></div>
 <div class="grid" id="den"></div>
 
 <details>
@@ -91,6 +104,10 @@ textarea{width:100%;height:90px;font-family:monospace;border:2px solid var(--lin
 </details>
 </div>
 </main>
+<dialog id="profile" aria-labelledby="pname">
+  <div id="pbody"></div>
+  <div class="bar" style="margin-top:14px"><button class="alt" id="pclose">Close</button></div>
+</dialog>
 
 <script>
 const KEY='foxden-save-v1';
@@ -109,7 +126,8 @@ const VISIT_MS=120000;     // later visitors every 2 minutes (change this number
 let visit={visitor:null,nextVisit:0},vKey='';
 
 const pick=a=>a[Math.floor(Math.random()*a.length)];
-function mk(sex,g,name,pers){return{id:Math.random().toString(36).slice(2,9),name:name||pick(NAMES),sex,g,pers:pers||pick(PERS)}}
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function mk(sex,g,name,pers){return{id:Math.random().toString(36).slice(2,9),name:name||pick(NAMES),sex,g,pers:pers||pick(PERS),mut:[]}}
 function save(){if(window.cloudSave)cloudSave()}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(d)&&d.length)return d}catch(e){}return null}
 function saveVisit(){if(window.cloudSave)cloudSave()}
@@ -133,9 +151,9 @@ function look(g){
   return{coat:red?'#d9672b':'#aab4bb',tip:tip?'#fbf6ee':'#3b2b25',eye:amber?'#e3a21a':'#3f9bd8',spots:!plain,
     text:(red?'Red':'Silver')+', '+(amber?'amber':'blue')+' eyes, '+(tip?'white':'dark')+' tail tip'+(plain?'':', spotted')}
 }
-function svg(f){
-  const p=look(f.g),id='t'+f.id;
-  return `<svg viewBox="0 0 200 160" role="img" aria-label="${f.name}, ${p.text}">
+function svg(f,pre=''){
+  const p=look(f.g),id=pre+'t'+f.id;
+  return `<svg viewBox="0 0 200 160" role="img" aria-label="${esc(f.name)}, ${p.text}">
   <defs><clipPath id="${id}"><path d="M140 108 Q196 104 186 48 Q150 58 134 92Z"/></clipPath></defs>
   <path d="M140 108 Q196 104 186 48 Q150 58 134 92Z" fill="${p.coat}"/>
   <circle cx="182" cy="56" r="24" fill="${p.tip}" clip-path="url(#${id})"/>
@@ -160,10 +178,11 @@ function render(){
   const den=document.getElementById('den');
   const show=document.getElementById('showGenes').checked;
   den.innerHTML=foxes.map(f=>`<div class="card${selected.includes(f.id)?' sel':''}${fresh.includes(f.id)?' new':''}" tabindex="0" role="button" aria-pressed="${selected.includes(f.id)}" data-id="${f.id}">
-    ${svg(f)}<div class="name">${f.name} ${f.sex==='F'?'♀':'♂'}</div>
+    ${svg(f)}<div class="name">${esc(f.name)} ${f.sex==='F'?'♀':'♂'}</div>
     <div class="pers">${f.pers||''}</div>
     <div class="small">${look(f.g).text}</div>
-    ${show?`<div class="genes">${genesText(f.g)}</div>`:''}</div>`).join('');
+    ${show?`<div class="genes">${genesText(f.g)}</div>`:''}
+    <button class="alt" data-view="${f.id}" style="margin-top:8px">View</button></div>`).join('');
   const two=selected.length===2;
   document.getElementById('breed').disabled=!two;
   document.getElementById('release').disabled=selected.length===0;
@@ -191,15 +210,21 @@ function breed(){
     foxes.push(pup);fresh.push(pup.id)
   }
   selected=[];save();render();
-  say(a.name+' and '+b.name+' had '+n+(n===1?' pup!':' pups!')+' New pups are highlighted.')
+  say(a.name+' and '+b.name+' had '+n+(n===1?' pup!':' pups!')+' Name them below, or keep the random names.');showLitter()
 }
 function release(){
   if(foxes.length-selected.length<1){say('You need to keep at least one fox.');return}
   foxes=foxes.filter(f=>!selected.includes(f.id));selected=[];fresh=[];save();render();say('Released.')
 }
 
-document.getElementById('den').addEventListener('click',e=>{const c=e.target.closest('.card');if(c)toggle(c.dataset.id)});
-document.getElementById('den').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const c=e.target.closest('.card');if(c){e.preventDefault();toggle(c.dataset.id)}}});
+document.getElementById('den').addEventListener('click',e=>{
+  const v=e.target.closest('[data-view]');if(v){openProfile(v.dataset.view);return}
+  const c=e.target.closest('.card');if(c)toggle(c.dataset.id)
+});
+document.getElementById('den').addEventListener('keydown',e=>{
+  if(e.target.closest('button'))return;
+  if(e.key==='Enter'||e.key===' '){const c=e.target.closest('.card');if(c){e.preventDefault();toggle(c.dataset.id)}}
+});
 document.getElementById('breed').onclick=breed;
 document.getElementById('release').onclick=release;
 document.getElementById('showGenes').onchange=render;
@@ -210,14 +235,14 @@ document.getElementById('imp').onclick=()=>{
     foxes=d;selected=[];fresh=[];save();render();say('Save loaded.')}
   catch(e){say('That save didn’t look right. Copy the whole text and try again.')}
 };
-document.getElementById('reset').onclick=()=>{if(confirm('Delete your den and start over?')){foxes=[];selected=[];fresh=[];visit={visitor:null,nextVisit:Date.now()+VISIT_MS};save();showStart()}};
+document.getElementById('reset').onclick=()=>{if(confirm('Delete your den and start over?')){foxes=[];selected=[];fresh=[];visit={visitor:null,nextVisit:Date.now()+VISIT_MS};save();document.getElementById('litter').innerHTML='';showStart()}};
 
 function show(w){
   for(const id of ['loading','auth','start','game'])document.getElementById(id).classList.toggle('hidden',id!==w);
   if(w==='game'){render();vKey='';renderVisit()}
 }
 function showStart(){
-  document.getElementById('picks').innerHTML=STARTERS.map(f=>`<div class="card">${svg(f)}<div class="name">${f.name} ${f.sex==='F'?'♀':'♂'}</div><div class="pers">${f.pers}</div><div class="small">${look(f.g).text}</div><p class="small">${f.blurb}</p><button data-pick="${f.id}">Choose ${f.name}</button></div>`).join('');
+  document.getElementById('picks').innerHTML=STARTERS.map(f=>`<div class="card">${svg(f)}<div class="name">${esc(f.name)} ${f.sex==='F'?'♀':'♂'}</div><div class="pers">${f.pers}</div><div class="small">${look(f.g).text}</div><p class="small">${f.blurb}</p><button data-pick="${f.id}">Choose ${esc(f.name)}</button></div>`).join('');
   show('start')
 }
 document.getElementById('picks').addEventListener('click',e=>{
@@ -231,7 +256,7 @@ function renderVisit(){
   const el=document.getElementById('visit'),v=visit.visitor,key=v?v.id:'none';
   if(key!==vKey){
     vKey=key;
-    el.innerHTML=v?`<div class="visitor"><div class="card">${svg(v)}</div><div><h2>A fox has wandered to your den</h2><div class="name">${v.name} ${v.sex==='F'?'♀':'♂'}</div><div class="pers">${v.pers}</div><div class="small">${look(v.g).text}</div><div class="bar" style="margin-top:10px"><button id="welcome">Welcome ${v.name}</button><button id="sendoff" class="alt">Send away</button></div></div></div>`
+    el.innerHTML=v?`<div class="visitor"><div class="card">${svg(v)}</div><div><h2>A fox has wandered to your den</h2><div class="name">${esc(v.name)} ${v.sex==='F'?'♀':'♂'}</div><div class="pers">${v.pers}</div><div class="small">${look(v.g).text}</div><div class="bar" style="margin-top:10px"><button id="welcome">Welcome ${esc(v.name)}</button><button id="sendoff" class="alt">Send away</button></div></div></div>`
       :`<p class="small">No visitor right now. The next one should arrive in <span id="cd"></span>.</p>`
   }
   if(!v){const c=document.getElementById('cd');if(c)c.textContent=fmt(visit.nextVisit-Date.now())}
@@ -249,9 +274,65 @@ document.getElementById('visit').addEventListener('click',e=>{
   visit={visitor:null,nextVisit:Date.now()+VISIT_MS};saveVisit();render();renderVisit()
 });
 document.getElementById('callVisit').onclick=()=>{if(visit.visitor){say('A visitor is already waiting.');return}visit.nextVisit=0;tick()};
+let profileId=null;
+function profileHTML(f){
+  const g=f.g,tip=g.tip.includes('W'),plain=g.mark.includes('S');
+  const mut=(f.mut&&f.mut.length)?f.mut.map(esc).join(', '):'None';
+  const genes=document.getElementById('showGenes').checked?`<dt>Genes</dt><dd>${genesText(g)}</dd>`:'';
+  return `${svg(f,'p')}
+  <h2 id="pname">${esc(f.name)} ${f.sex==='F'?'♀':'♂'}</h2>
+  <div class="bar"><input id="rn" maxlength="20" value="${esc(f.name)}" aria-label="Fox name"><button id="rnsave">Rename</button></div>
+  <p id="rnmsg" class="small" role="status"></p>
+  <h3>Traits</h3>
+  <dl class="tr">
+    <dt>Personality</dt><dd>${esc(f.pers||'Unknown')}</dd>
+    <dt>Coat</dt><dd>${g.coat.includes('R')?'Red':'Silver'}</dd>
+    <dt>Eyes</dt><dd>${g.eyes.includes('E')?'Amber':'Blue'}</dd>
+    <dt>Markings</dt><dd>${tip?'White':'Dark'} tail tip, ${plain?'plain':'spotted'} back</dd>
+    <dt>Mutations</dt><dd>${mut}</dd>${genes}
+  </dl>
+  <h3>Role</h3>
+  <p style="margin:0;font-weight:600">COMING SOON</p>`
+}
+function openProfile(id){
+  const f=foxes.find(x=>x.id===id);if(!f)return;
+  profileId=id;
+  document.getElementById('pbody').innerHTML=profileHTML(f);
+  document.getElementById('profile').showModal()
+}
+function renameFox(){
+  const f=foxes.find(x=>x.id===profileId);if(!f)return;
+  const name=document.getElementById('rn').value.trim().slice(0,20);
+  const m=document.getElementById('rnmsg');
+  if(!name){m.textContent='Give your fox a name first.';return}
+  f.name=name;save();render();
+  document.getElementById('pname').textContent=name+' '+(f.sex==='F'?'♀':'♂');
+  m.textContent='Renamed!'
+}
+document.getElementById('pbody').addEventListener('click',e=>{if(e.target.id==='rnsave')renameFox()});
+document.getElementById('pbody').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='rn'){e.preventDefault();renameFox()}});
+document.getElementById('pclose').onclick=()=>document.getElementById('profile').close();
+document.getElementById('profile').addEventListener('click',e=>{if(e.target.id==='profile')e.target.close()});
+
+function showLitter(){
+  const el=document.getElementById('litter');
+  const pups=fresh.map(id=>foxes.find(f=>f.id===id)).filter(Boolean);
+  if(!pups.length){el.innerHTML='';return}
+  el.innerHTML=`<div class="litter"><h2>New litter</h2>${pups.map(f=>`<div class="lrow"><div class="lpic">${svg(f,'l')}</div><div><div class="small">${f.sex==='F'?'Female':'Male'} · ${esc(f.pers||'')}</div><input data-name="${f.id}" maxlength="20" value="${esc(f.name)}" aria-label="Name for new pup"></div></div>`).join('')}<button id="litterdone">Save names</button></div>`
+}
+document.getElementById('litter').addEventListener('click',e=>{
+  if(e.target.id!=='litterdone')return;
+  document.querySelectorAll('#litter input[data-name]').forEach(inp=>{
+    const f=foxes.find(x=>x.id===inp.dataset.name),n=inp.value.trim().slice(0,20);
+    if(f&&n)f.name=n
+  });
+  save();document.getElementById('litter').innerHTML='';render();say('Names saved.')
+});
+
 window.getSaveData=()=>JSON.stringify({foxes,visit});
 window.enterAuth=()=>{foxes=[];selected=[];fresh=[];show('auth')};
 window.enterGame=(raw,email)=>{
+  document.getElementById('litter').innerHTML='';
   foxes=[];selected=[];fresh=[];visit={visitor:null,nextVisit:Date.now()+VISIT_MS};
   if(raw){try{const d=JSON.parse(raw);if(Array.isArray(d.foxes))foxes=d.foxes;if(d.visit&&typeof d.visit.nextVisit==='number')visit=d.visit}catch(e){}}
   document.getElementById('who').textContent='Signed in as '+email;
